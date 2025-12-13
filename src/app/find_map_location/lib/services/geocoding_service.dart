@@ -3,18 +3,20 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:find_map_location/models/postal_code.dart';
-import 'package:find_map_location/models/city_location.dart';
+import 'package:find_map_location/models/city.dart';
+import 'package:find_map_location/models/postal_code_result.dart';
 
 /// Abstract interface for geocoding services
 abstract class GeocodingService {
-  /// Fetches city location for a given postal code
-  Future<CityLocation> fetchLocation(PostalCode postalCode);
+  /// Fetches all cities for a given postal code
+  Future<PostalCodeResult> fetchLocations(PostalCode postalCode);
 }
 
 /// Implementation using API Adresse (French government API)
 class ApiAdresseGeocodingService implements GeocodingService {
   static const String baseUrl = 'https://api-adresse.data.gouv.fr/search';
   static const Duration timeout = Duration(seconds: 10);
+  static const int limit = 50; // Maximum results for multi-city postal codes
 
   final http.Client client;
 
@@ -22,8 +24,8 @@ class ApiAdresseGeocodingService implements GeocodingService {
       : client = client ?? http.Client();
 
   @override
-  Future<CityLocation> fetchLocation(PostalCode postalCode) async {
-    final uri = Uri.parse('$baseUrl/?q=${postalCode.value}&type=municipality&limit=1');
+  Future<PostalCodeResult> fetchLocations(PostalCode postalCode) async {
+    final uri = Uri.parse('$baseUrl/?q=${postalCode.value}&type=municipality&limit=$limit');
 
     try {
       final response = await client.get(uri).timeout(timeout);
@@ -36,7 +38,16 @@ class ApiAdresseGeocodingService implements GeocodingService {
           throw PostalCodeNotFoundException(postalCode.value);
         }
 
-        return CityLocation.fromJson(features[0] as Map<String, dynamic>);
+        // Parse all cities from features
+        final cities = features
+            .cast<Map<String, dynamic>>()
+            .map((feature) => City.fromJson(feature, postalCode.value))
+            .toList();
+
+        return PostalCodeResult(
+          postalCode: postalCode.value,
+          cities: cities,
+        );
       } else if (response.statusCode >= 500) {
         throw ServerException('Server error: ${response.statusCode}');
       } else {

@@ -6,6 +6,18 @@
 *.swp
 .buildlog/
 .history
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.keystore
+secrets/
 
 
 
