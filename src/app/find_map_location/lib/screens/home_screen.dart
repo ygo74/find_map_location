@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:find_map_location/models/postal_code.dart';
-import 'package:find_map_location/models/city_location.dart';
+import 'package:find_map_location/models/city.dart';
 import 'package:find_map_location/services/geocoding_service.dart';
 import 'package:find_map_location/widgets/postal_code_input.dart';
 import 'package:find_map_location/widgets/map_display.dart';
+import 'package:find_map_location/screens/city_selection_screen.dart';
 
 /// Main screen for postal code lookup and map display.
 ///
 /// Allows users to enter French postal codes and view the corresponding
-/// city location on an interactive map. Handles validation, loading states,
-/// and error messages.
+/// city location on an interactive map. Handles multiple cities per postal code
+/// with selection interface. Supports validation, loading states, and error messages.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,10 +22,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final _geocodingService = ApiAdresseGeocodingService();
   final _controller = TextEditingController();
 
-  CityLocation? _currentLocation;
+  City? _currentCity;
   bool _isLoading = false;
   String? _errorMessage;
-  Future<CityLocation>? _pendingRequest;
+  int _requestId = 0; // For request cancellation tracking
 
   @override
   void dispose() {
@@ -61,25 +62,54 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorMessage = null;
     });
 
-    // Cancel previous request (latest-wins pattern)
-    _pendingRequest = null;
-
-    // Start new request
-    final request = _geocodingService.fetchLocation(postalCode);
-    _pendingRequest = request;
+    // Increment request ID for cancellation tracking
+    final currentRequestId = ++_requestId;
 
     try {
-      final location = await request;
+      final result = await _geocodingService.fetchLocations(postalCode);
 
-      // Only update if this is still the current request
-      if (_pendingRequest == request) {
+      // Discard if this request was superseded (latest-wins pattern)
+      if (currentRequestId != _requestId) {
+        return;
+      }
+
+      // Check if result requires city selection
+      if (result.requiresSelection) {
+        // Multiple cities - show selection screen
         setState(() {
-          _currentLocation = location;
           _isLoading = false;
+        });
+
+        // Navigate to selection screen (full screen push)
+        if (!mounted) return;
+        final selectedCity = await Navigator.push<City>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CitySelectionScreen(cities: result.cities),
+          ),
+        );
+
+        // Check if user cancelled selection
+        if (selectedCity != null && mounted) {
+          setState(() {
+            _currentCity = selectedCity;
+          });
+        }
+      } else if (result.isSingleCity) {
+        // Single city - display map immediately
+        setState(() {
+          _currentCity = result.singleCity;
+          _isLoading = false;
+        });
+      } else {
+        // Empty result (should not happen - API throws exception)
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'No cities found for this postal code.';
         });
       }
     } on PostalCodeNotFoundException catch (e) {
-      if (_pendingRequest == request) {
+      if (currentRequestId == _requestId) {
         setState(() {
           _isLoading = false;
           _errorMessage =
@@ -87,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } on NetworkException {
-      if (_pendingRequest == request) {
+      if (currentRequestId == _requestId) {
         setState(() {
           _isLoading = false;
           _errorMessage =
@@ -95,14 +125,14 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } on ServerException {
-      if (_pendingRequest == request) {
+      if (currentRequestId == _requestId) {
         setState(() {
           _isLoading = false;
           _errorMessage = 'Service temporarily unavailable. Please try again later.';
         });
       }
     } catch (e) {
-      if (_pendingRequest == request) {
+      if (currentRequestId == _requestId) {
         setState(() {
           _isLoading = false;
           _errorMessage = 'An unexpected error occurred. Please try again.';
@@ -134,9 +164,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: CircularProgressIndicator(),
               ),
             )
-          else if (_currentLocation != null)
+          else if (_currentCity != null)
             Expanded(
-              child: MapDisplay(location: _currentLocation!),
+              child: MapDisplay(
+                latitude: _currentCity!.latitude,
+                longitude: _currentCity!.longitude,
+                cityName: _currentCity!.name,
+              ),
             )
           else
             const Expanded(

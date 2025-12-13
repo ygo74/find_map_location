@@ -1,24 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:find_map_location/models/city_location.dart';
+import 'package:latlong2/latlong.dart';
 
 /// Widget that displays an interactive map centered on a city location.
 ///
 /// Uses flutter_map with OpenStreetMap tiles to display a map at zoom level 13
-/// (neighborhood/arrondissement scale) centered on the provided [location].
+/// (neighborhood/arrondissement scale) centered on the provided coordinates.
 class MapDisplay extends StatelessWidget {
-  final CityLocation location;
+  final double latitude;
+  final double longitude;
+  final String cityName;
 
   const MapDisplay({
     super.key,
-    required this.location,
+    required this.latitude,
+    required this.longitude,
+    required this.cityName,
   });
 
   @override
   Widget build(BuildContext context) {
+    final coordinates = LatLng(latitude, longitude);
+
     return FlutterMap(
       options: MapOptions(
-        initialCenter: location.coordinates,
+        initialCenter: coordinates,
         initialZoom: 13.0, // Neighborhood/arrondissement scale
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all,
@@ -32,7 +38,7 @@ class MapDisplay extends StatelessWidget {
         MarkerLayer(
           markers: [
             Marker(
-              point: location.coordinates,
+              point: coordinates,
               width: 40,
               height: 40,
               child: const Icon(
