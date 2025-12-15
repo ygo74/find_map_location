@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -208,6 +209,143 @@ void main() {
       } catch (_) {}
 
       expect(requestUrl, contains('limit=50'));
+    });
+
+    // Reverse Geocoding Tests (T019)
+    group('reverseGeocode', () {
+      test('returns RandomAddress for valid housenumber', () async {
+        final mockClient = MockClient((request) async {
+          expect(request.url.toString(), contains('/reverse/'));
+          expect(request.url.toString(), contains('lat=48.8606'));
+          expect(request.url.toString(), contains('lon=2.3376'));
+          expect(request.url.toString(), contains('type=housenumber'));
+          return http.Response('''
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [2.3376, 48.8606]
+      },
+      "properties": {
+        "housenumber": "42",
+        "street": "Rue de Rivoli",
+        "city": "Paris",
+        "postcode": "75001",
+        "type": "housenumber"
+      }
+    }
+  ]
+}
+''', 200);
+        });
+
+        final service = ApiAdresseGeocodingService(client: mockClient);
+        final address = await service.reverseGeocode(48.8606, 2.3376);
+
+        expect(address, isNotNull);
+        expect(address!.streetNumber, '42');
+        expect(address.streetName, 'Rue de Rivoli');
+        expect(address.cityName, 'Paris');
+        expect(address.postcode, '75001');
+        expect(address.latitude, 48.8606);
+        expect(address.longitude, 2.3376);
+      });
+
+      test('returns null for empty features', () async {
+        final mockClient = MockClient((request) async {
+          return http.Response('{"features": []}', 200);
+        });
+
+        final service = ApiAdresseGeocodingService(client: mockClient);
+        final address = await service.reverseGeocode(48.8606, 2.3376);
+
+        expect(address, isNull);
+      });
+
+      test('returns null for non-housenumber type', () async {
+        final mockClient = MockClient((request) async {
+          return http.Response('''
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [2.3376, 48.8606]
+      },
+      "properties": {
+        "type": "street",
+        "street": "Rue de Rivoli",
+        "city": "Paris",
+        "postcode": "75001"
+      }
+    }
+  ]
+}
+''', 200);
+        });
+
+        final service = ApiAdresseGeocodingService(client: mockClient);
+        final address = await service.reverseGeocode(48.8606, 2.3376);
+
+        expect(address, isNull);
+      });
+
+      test('handles special characters in address', () async {
+        final mockClient = MockClient((request) async {
+          return http.Response('''
+{
+  "features": [
+    {
+      "geometry": {
+        "coordinates": [2.34, 48.86]
+      },
+      "properties": {
+        "housenumber": "5",
+        "street": "Rue de l'Église",
+        "city": "Paris",
+        "postcode": "75001",
+        "type": "housenumber"
+      }
+    }
+  ]
+}
+''', 200);
+        });
+
+        final service = ApiAdresseGeocodingService(client: mockClient);
+        final address = await service.reverseGeocode(48.86, 2.34);
+
+        expect(address, isNotNull);
+        expect(address!.streetName, "Rue de l'Église");
+      });
+
+      test('throws ServerException on HTTP error', () async {
+        final mockClient = MockClient((request) async {
+          return http.Response('Server error', 500);
+        });
+
+        final service = ApiAdresseGeocodingService(client: mockClient);
+
+        expect(
+          () => service.reverseGeocode(48.8606, 2.3376),
+          throwsA(isA<ServerException>()),
+        );
+      });
+
+      test('throws NetworkException on socket error', () async {
+        final mockClient = MockClient((request) async {
+          throw SocketException('No internet');
+        });
+
+        final service = ApiAdresseGeocodingService(client: mockClient);
+
+        expect(
+          () => service.reverseGeocode(48.8606, 2.3376),
+          throwsA(isA<NetworkException>()),
+        );
+      });
     });
   });
 }
