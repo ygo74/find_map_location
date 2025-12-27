@@ -119,7 +119,7 @@ void main() {
       test('grid aligns properly with city bounds when provided', () {
         final cityCenter = LatLng(48.8566, 2.3522);
         final cellSize = 500.0;
-        
+
         // Calculate city bounds
         final cityBounds = GridCalculationService.calculateCityBounds(
           cityCenter,
@@ -151,7 +151,7 @@ void main() {
         expect(bounds.south, lessThan(cityCenter.latitude));
         expect(bounds.east, greaterThan(cityCenter.longitude));
         expect(bounds.west, lessThan(cityCenter.longitude));
-        
+
         // Verify bounds are approximately symmetric
         final latDiff = bounds.north - cityCenter.latitude;
         final latDiff2 = cityCenter.latitude - bounds.south;

@@ -16,7 +16,7 @@ void main() {
     testWidgets('app loads and initializes with default grid size', (WidgetTester tester) async {
       // Arrange - set default grid size
       SharedPreferences.setMockInitialValues({});
-      
+
       // Act - launch app
       app.main();
       await tester.pumpAndSettle(const Duration(seconds: 3));

@@ -87,19 +87,19 @@ class GridCalculationService {
     // If city bounds provided, use north-west corner as approximate origin
     if (cityBounds != null) {
       final northWest = LatLng(cityBounds.north, cityBounds.west);
-      
+
       // Calculate distance from city center to align grid
       final double eastDist = _calculateEastDistance(northWest, cityCenter);
       final double southDist = _calculateSouthDistance(northWest, cityCenter);
-      
+
       // Snap to grid alignment - find the nearest grid line west and north of the bounds
       final int cellsEast = (eastDist / cellSizeMeters).floor();
       final int cellsSouth = (southDist / cellSizeMeters).floor();
-      
+
       // Calculate aligned origin
       return _offsetCoordinate(northWest, cellsEast * cellSizeMeters, cellsSouth * cellSizeMeters);
     }
-    
+
     // Fallback: center the grid on the city center point
     // Align origin so that city center falls on a cell boundary
     return cityCenter;
