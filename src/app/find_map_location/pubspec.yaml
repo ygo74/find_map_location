@@ -14,6 +14,7 @@ dependencies:
   http: ^1.2.0
   geolocator: ^11.0.0  # Location services for zoom to user position
   permission_handler: ^11.0.0  # iOS/Android location permissions
+  shared_preferences: ^2.0.0  # Grid overlay size persistence
 
 dev_dependencies:
   flutter_test:

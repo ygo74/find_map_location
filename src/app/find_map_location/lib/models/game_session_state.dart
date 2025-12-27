@@ -10,12 +10,14 @@ class GameSessionState {
   final RandomAddress? currentAddress;
   final Set<RandomAddress> usedAddresses;
   final bool hasStartedSearch;
+  final String? currentCellId;
 
   const GameSessionState._({
     required this.city,
     required this.currentAddress,
     required this.usedAddresses,
     required this.hasStartedSearch,
+    this.currentCellId,
   });
 
   /// Creates initial state for a city with no addresses
@@ -25,13 +27,15 @@ class GameSessionState {
       currentAddress: null,
       usedAddresses: {},
       hasStartedSearch: false,
+      currentCellId: null,
     );
   }
 
   /// Creates new state with the given address as current
   ///
-  /// Automatically adds the address to usedAddresses to prevent reuse
-  GameSessionState withAddress(RandomAddress address) {
+  /// Automatically adds the address to usedAddresses to prevent reuse.
+  /// Optionally includes the cell ID for the address location.
+  GameSessionState withAddress(RandomAddress address, {String? cellId}) {
     final newUsedAddresses = Set<RandomAddress>.from(usedAddresses)
       ..add(address);
 
@@ -40,6 +44,7 @@ class GameSessionState {
       currentAddress: address,
       usedAddresses: newUsedAddresses,
       hasStartedSearch: hasStartedSearch,
+      currentCellId: cellId,
     );
   }
 
@@ -55,15 +60,18 @@ class GameSessionState {
       currentAddress: currentAddress,
       usedAddresses: newUsedAddresses,
       hasStartedSearch: hasStartedSearch,
+      currentCellId: currentCellId,
     );
   }
 
   /// Marks the search as started (Start Search button pressed)
   GameSessionState withSearchStarted() {
-    return GameSessionState._( city: city,
+    return GameSessionState._(
+      city: city,
       currentAddress: currentAddress,
       usedAddresses: usedAddresses,
       hasStartedSearch: true,
+      currentCellId: currentCellId,
     );
   }
 
@@ -81,12 +89,14 @@ class GameSessionState {
           currentAddress == other.currentAddress &&
           usedAddresses.length == other.usedAddresses.length &&
           usedAddresses.containsAll(other.usedAddresses) &&
-          hasStartedSearch == other.hasStartedSearch;
+          hasStartedSearch == other.hasStartedSearch &&
+          currentCellId == other.currentCellId;
 
   @override
   int get hashCode =>
       city.hashCode ^
       currentAddress.hashCode ^
       usedAddresses.fold(0, (prev, addr) => prev ^ addr.hashCode) ^
-      hasStartedSearch.hashCode;
+      hasStartedSearch.hashCode ^
+      currentCellId.hashCode;
 }

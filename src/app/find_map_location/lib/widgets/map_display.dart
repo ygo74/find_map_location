@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:find_map_location/models/grid_configuration.dart';
+import 'package:find_map_location/models/lat_lng_bounds.dart';
+import 'package:find_map_location/widgets/grid_overlay_widget.dart';
+import 'package:find_map_location/services/grid_calculation_service.dart';
 
 /// Widget that displays an interactive map centered on a city location.
 ///
 /// Uses flutter_map with OpenStreetMap tiles to display a map at zoom level 13
 /// (neighborhood/arrondissement scale) centered on the provided coordinates.
 /// Optionally displays a target address marker when targetLatitude and targetLongitude are provided.
+/// Optionally displays a grid overlay when gridConfiguration is provided.
 class MapDisplay extends StatelessWidget {
   final double latitude;
   final double longitude;
@@ -14,6 +19,8 @@ class MapDisplay extends StatelessWidget {
   final MapController? mapController;
   final double? targetLatitude;
   final double? targetLongitude;
+  final GridConfiguration? gridConfiguration;
+  final GridBounds? cityBounds;
 
   const MapDisplay({
     super.key,
@@ -23,12 +30,26 @@ class MapDisplay extends StatelessWidget {
     this.mapController,
     this.targetLatitude,
     this.targetLongitude,
+    this.gridConfiguration,
+    this.cityBounds,
   });
 
   @override
   Widget build(BuildContext context) {
     final coordinates = LatLng(latitude, longitude);
     final controller = mapController ?? MapController();
+
+    // Calculate city bounds for map constraints (default 5km radius)
+    final bounds = cityBounds ?? GridCalculationService.calculateCityBounds(
+      coordinates,
+      5000.0, // 5km radius for typical city
+    );
+
+    // Convert to flutter_map LatLngBounds
+    final mapBounds = LatLngBounds(
+      LatLng(bounds.south, bounds.west),
+      LatLng(bounds.north, bounds.east),
+    );
 
     return Stack(
       children: [
@@ -37,6 +58,11 @@ class MapDisplay extends StatelessWidget {
           options: MapOptions(
             initialCenter: coordinates,
             initialZoom: 13.0, // Neighborhood/arrondissement scale
+            minZoom: 12.0, // Prevent zooming out too far
+            maxZoom: 18.0, // Allow detailed street view
+            cameraConstraint: CameraConstraint.contain(
+              bounds: mapBounds,
+            ),
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all,
             ),
@@ -46,6 +72,12 @@ class MapDisplay extends StatelessWidget {
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.example.find_map_location',
             ),
+            // Grid overlay (if configured)
+            if (gridConfiguration != null)
+              GridOverlayWidget(
+                configuration: gridConfiguration!,
+                mapController: controller,
+              ),
             MarkerLayer(
               markers: [
                 // Target address marker (red pin) - only if target coordinates provided

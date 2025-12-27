@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:find_map_location/models/postal_code.dart';
 import 'package:find_map_location/models/city.dart';
 import 'package:find_map_location/models/game_session_state.dart';
+import 'package:find_map_location/models/grid_configuration.dart';
 import 'package:find_map_location/services/geocoding_service.dart';
 import 'package:find_map_location/services/random_address_service.dart';
 import 'package:find_map_location/services/location_service.dart';
+import 'package:find_map_location/services/grid_settings_service.dart';
+import 'package:find_map_location/services/grid_calculation_service.dart';
 import 'package:find_map_location/widgets/postal_code_input.dart';
 import 'package:find_map_location/widgets/map_display.dart';
 import 'package:find_map_location/widgets/address_display.dart';
 import 'package:find_map_location/widgets/start_search_button.dart';
+import 'package:find_map_location/widgets/grid_settings_dialog.dart';
 import 'package:find_map_location/screens/city_selection_screen.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:latlong2/latlong.dart';
 
 /// Main screen for postal code lookup and map display.
 ///
@@ -30,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _locationService = LocationService();
   final _controller = TextEditingController();
   final _mapController = MapController();
+  GridConfiguration? _gridConfig;
 
   GameSessionState? _sessionState;
   bool _isLoading = false;
@@ -40,6 +47,20 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _addressService = RandomAddressService(geocodingService: _geocodingService);
+    _initializeGridConfiguration();
+  }
+
+  /// Initializes grid configuration with persisted settings
+  Future<void> _initializeGridConfiguration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final settingsService = GridSettingsService(prefs);
+    final gridSize = settingsService.getGridSize();
+
+    if (mounted) {
+      setState(() {
+        _gridConfig = GridConfiguration(cellSizeMeters: gridSize);
+      });
+    }
   }
 
   @override
@@ -51,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Generates a random address for the given city using RandomAddressService
   ///
   /// Updates game session state with the new address and ensures uniqueness.
+  /// If this is the first address, also initializes the grid origin.
   Future<void> _generateAndSetAddress(City city) async {
     // Create or update session state for this city
     final currentState = _sessionState?.city == city
@@ -64,8 +86,36 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (address != null) {
+      // Initialize grid origin if this is the first address and grid not initialized
+      if (_gridConfig != null && _gridConfig!.origin == null) {
+        // Use city center for grid alignment, not the specific address
+        final cityCenter = LatLng(city.latitude, city.longitude);
+        final cityBounds = GridCalculationService.calculateCityBounds(
+          cityCenter,
+          5000.0, // 5km radius
+        );
+        final origin = GridCalculationService.calculateGridOrigin(
+          cityCenter,
+          _gridConfig!.cellSizeMeters.toDouble(),
+          cityBounds: cityBounds,
+        );
+        _gridConfig!.setOrigin(origin);
+      }
+
+      // Calculate cell ID for this address (for "Show Solution" feature)
+      String? cellId;
+      if (_gridConfig != null && _gridConfig!.origin != null) {
+        final addressPoint = LatLng(address.latitude, address.longitude);
+        final cell = GridCalculationService.getCellForPoint(
+          addressPoint,
+          _gridConfig!.origin!,
+          _gridConfig!.cellSizeMeters.toDouble(),
+        );
+        cellId = cell.id;
+      }
+
       setState(() {
-        _sessionState = currentState.withAddress(address);
+        _sessionState = currentState.withAddress(address, cellId: cellId);
       });
     } else {
       // Could not generate address
@@ -273,6 +323,13 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Find Map Location'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _handleGridSettings,
+            tooltip: 'Grid Settings',
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -390,6 +447,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 mapController: _mapController,
                 targetLatitude: _sessionState!.currentAddress?.latitude,
                 targetLongitude: _sessionState!.currentAddress?.longitude,
+                gridConfiguration: _gridConfig,
+                cityBounds: _gridConfig?.origin != null
+                    ? GridCalculationService.calculateCityBounds(
+                        LatLng(_sessionState!.city.latitude, _sessionState!.city.longitude),
+                        5000.0,
+                      )
+                    : null,
               ),
             )
           else
@@ -406,6 +470,79 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
+      floatingActionButton: _sessionState?.currentCellId != null
+          ? Semantics(
+              label: 'Show solution button. Reveals which grid cell contains the address',
+              button: true,
+              child: FloatingActionButton.extended(
+                onPressed: _showSolution,
+                icon: const Icon(Icons.lightbulb_outline),
+                label: const Text('Show Solution'),
+                tooltip: 'Show Solution',
+              ),
+            )
+          : null,
     );
+  }
+
+  /// Shows a SnackBar displaying the grid cell ID containing the target address
+  void _showSolution() {
+    if (_sessionState?.currentCellId == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Address is in cell ${_sessionState!.currentCellId}'),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Handles grid settings button press
+  ///
+  /// Shows GridSettingsDialog and applies new cell size if changed.
+  /// Persists the setting and recalculates cell ID if address exists.
+  Future<void> _handleGridSettings() async {
+    if (_gridConfig == null) return;
+
+    final newSize = await showDialog<int>(
+      context: context,
+      builder: (context) => GridSettingsDialog(
+        currentCellSizeMeters: _gridConfig!.cellSizeMeters,
+      ),
+    );
+
+    // User cancelled or selected same size
+    if (newSize == null || newSize == _gridConfig!.cellSizeMeters) {
+      return;
+    }
+
+    // Update grid configuration
+    _gridConfig!.setCellSize(newSize);
+
+    // Persist the setting
+    final prefs = await SharedPreferences.getInstance();
+    final settingsService = GridSettingsService(prefs);
+    await settingsService.setGridSize(newSize);
+
+    // Recalculate cell ID if address exists
+    if (_sessionState?.currentAddress != null && _gridConfig!.origin != null) {
+      final addressPoint = LatLng(
+        _sessionState!.currentAddress!.latitude,
+        _sessionState!.currentAddress!.longitude,
+      );
+      final cell = GridCalculationService.getCellForPoint(
+        addressPoint,
+        _gridConfig!.origin!,
+        _gridConfig!.cellSizeMeters.toDouble(),
+      );
+
+      setState(() {
+        _sessionState = _sessionState!.withAddress(
+          _sessionState!.currentAddress!,
+          cellId: cell.id,
+        );
+      });
+    }
   }
 }
