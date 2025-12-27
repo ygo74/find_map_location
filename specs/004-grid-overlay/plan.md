@@ -7,15 +7,15 @@
 
 ## Summary
 
-Implement a configurable grid overlay system for OpenStreetMap that divides the map into square cells with alphanumeric identifiers (letters for columns, numbers for rows). The system calculates grid origin dynamically centered on the first searched address, maintains fixed grid positioning for subsequent searches, and provides a game mechanism where users guess which cell contains an address (with optional solution reveal). Grid cell size is configurable via predefined values (250m, 500m, 1000m, 2000m) with 500m default. Technical approach uses existing flutter_map infrastructure with custom overlay painter for grid rendering and coordinate-to-cell calculation logic.
+Implement a configurable grid overlay system for OpenStreetMap that divides the map into square cells with alphanumeric identifiers (letters for columns, numbers for rows). The system centers the grid on the selected city and constrains it to city boundaries (5km radius by default), maintains fixed grid positioning aligned with city bounds, and restricts map navigation to prevent users from panning outside the city area. Provides a game mechanism where users guess which cell contains an address (with optional solution reveal). Grid cell size is configurable via predefined values (250m, 500m, 1000m, 2000m) with 500m default. Technical approach uses existing flutter_map infrastructure with CameraConstraint for map bounds, custom overlay painter for grid rendering, and coordinate-to-cell calculation logic with city bounds alignment.
 
 ## Technical Context
 
 **Language/Version**: Dart 3.10.4+ / Flutter 3.x (Flutter SDK from pubspec.yaml: ^3.10.4)
 
 **Primary Dependencies**:
-- `flutter_map` (^7.0.0) - Existing OpenStreetMap integration; will render grid overlay
-- `latlong2` (^0.9.0) - Geographic coordinate handling for grid calculations
+- `flutter_map` (^8.2.2) - Existing OpenStreetMap integration; will render grid overlay and implement map constraints via CameraConstraint.contain()
+- `latlong2` (^0.9.0) - Geographic coordinate handling for grid calculations and city bounds
 - `shared_preferences` (^2.0.0) - Persist user's grid size preference
 - State Management: Built-in `StatefulWidget` with potential `ChangeNotifier` for grid configuration
 
@@ -44,6 +44,9 @@ Implement a configurable grid overlay system for OpenStreetMap that divides the 
 - Maximum ~100 visible cells at once (performance ceiling for rendering)
 - Grid labels must remain readable at zoom levels 12-16
 - North-west priority rule for addresses on cell boundaries (FR-005a)
+- Map navigation restricted to city bounds (5km radius default) via CameraConstraint
+- Grid must align with city bounds (north-west corner) for optimal city coverage
+- Zoom levels constrained: minimum 12.0, maximum 18.0
 
 **Scale/Scope**:
 - Add 4-6 new source files (grid model, grid painter, grid service, settings screen)
@@ -156,9 +159,11 @@ src/app/find_map_location/
 **Structure Decision**: Flutter mobile single-app architecture. Grid feature adds 6 new source files (3 models, 2 services, 2 widgets) and corresponding test files. Integrates into existing `src/app/find_map_location/` structure following feature-first organization (models/, services/, widgets/, screens/).
 
 **Key Integration Points**:
-- `map_screen.dart`: Modified to instantiate GridConfiguration and GridOverlayWidget
-- `pubspec.yaml`: Add `shared_preferences: ^2.0.0` dependency
-- Existing geocoding service: Used to trigger grid origin calculation on first address search
+- `map_display.dart`: Modified to add CameraConstraint.contain() for map bounds restriction and pass city bounds to map configuration
+- `home_screen.dart`: Modified to calculate city bounds (5km radius) and pass to MapDisplay widget
+- `grid_calculation_service.dart`: Enhanced with calculateCityBounds() method and grid alignment logic
+- `pubspec.yaml`: Update `flutter_map` to ^8.2.2 (for CameraConstraint support)
+- Existing geocoding service: Used to get city center coordinates for bounds calculation
 
 ## Complexity Tracking
 
@@ -200,6 +205,10 @@ src/app/find_map_location/
 - GridCell immutable value objects
 - Pure function design for GridCalculationService (highly testable)
 - Max 100 visible cells performance limit
+- City bounds calculated with 5km radius around city center
+- Grid origin aligned to city bounds (north-west corner) instead of arbitrary offset
+- CameraConstraint.contain() used for map navigation restrictions
+- Zoom constraints: min 12.0, max 18.0 for optimal grid visibility
 
 ---
 

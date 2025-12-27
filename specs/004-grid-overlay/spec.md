@@ -2,18 +2,25 @@
 
 **Feature Branch**: `004-grid-overlay`
 **Created**: 2025-12-16
-**Status**: Draft
+**Updated**: 2025-12-27
+**Status**: Completed
 **Input**: User description: "Carroyage paramétrable sur carte OpenStreetMap avec numérotation alphanumérique pour localiser l'adresse recherchée. Taille des cases configurable (défaut 500m)"
 
 ## Clarifications
 
 ### Session 2025-12-16
 
-- Q: Positionnement de l'origine de la grille (lettre A, ligne 1) → A: Origine dynamique calculée pour centrer la grille autour de la première adresse recherchée
+- Q: Positionnement de l'origine de la grille (lettre A, ligne 1) → A: Origine calculée pour centrer la grille sur le centre de la ville sélectionnée
 - Q: Style visuel de mise en évidence de la case contenant l'adresse → A: Aucune mise en évidence automatique - le but du jeu est que l'utilisateur trouve lui-même la case correspondant à l'adresse
 - Q: Options de taille de cases prédéfinies ou saisie libre → A: Liste de valeurs prédéfinies uniquement (250m, 500m, 1000m, 2000m)
-- Q: Comportement du carroyage lors de recherches d'adresses successives → A: Garder le carroyage fixe une fois initialisé (même origine pour toutes les adresses suivantes)
+- Q: Comportement du carroyage lors de recherches d'adresses successives → A: Le carroyage reste fixe et couvre toute la ville seulement (pas de déplacement)
 - Q: Règle de décision lorsqu'une adresse est exactement sur une ligne de séparation → A: Règle de priorité géographique nord-ouest (l'adresse appartient à la case supérieure-gauche)
+
+### Session 2025-12-27
+
+- Q: Étendue de la grille → A: La grille couvre uniquement la zone de la ville (rayon de 5km par défaut autour du centre)
+- Q: Navigation sur la carte → A: La carte est bloquée aux limites de la ville pour empêcher l'utilisateur de sortir de la zone de jeu
+- Q: Alignement de la grille → A: La grille s'aligne sur les limites de la ville (coin nord-ouest des limites) pour une couverture optimale
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -47,7 +54,8 @@ Lorsqu'une adresse est recherchée et localisée sur la carte, l'utilisateur doi
 1. **Given** l'utilisateur a recherché une adresse, **When** l'adresse est trouvée et affichée sur la carte, **Then** le marqueur de l'adresse est visible mais aucune case n'est mise en évidence automatiquement
 2. **Given** une adresse est localisée, **When** l'utilisateur observe la carte, **Then** il peut voir le carroyage et le marqueur d'adresse pour déterminer visuellement la case correspondante
 3. **Given** l'utilisateur souhaite vérifier sa réponse, **When** il demande la solution (via un bouton dédié), **Then** le système affiche l'identifiant de la case correcte (ex: "C7")
-4. **Given** le carroyage a été initialisé avec une première adresse, **When** l'utilisateur recherche une nouvelle adresse, **Then** le carroyage conserve la même origine et numérotation (pas de recentrage)
+3. **Given** le carroyage a été initialisé pour une ville, **When** l'utilisateur recherche une nouvelle adresse dans la même ville, **Then** le carroyage reste fixe et couvre toute la zone de la ville
+4. **Given** le carroyage est affiché, **When** l'utilisateur tente de déplacer la carte en dehors des limites de la ville, **Then** la carte reste bloquée aux limites définies
 
 ---
 
@@ -83,8 +91,9 @@ L'utilisateur peut modifier la taille des cases du carroyage depuis les paramèt
 - **FR-001**: Le système DOIT superposer une grille de cases carrées sur la carte OpenStreetMap affichée
 - **FR-002**: Le système DOIT utiliser une taille de case par défaut de 500 mètres (500m × 500m)
 - **FR-003**: Le système DOIT numéroter les colonnes de la grille avec des lettres (A, B, C, etc.) et les lignes avec des chiffres (1, 2, 3, etc.)
-- **FR-003a**: Le système DOIT calculer l'origine de la grille (case A1) de manière dynamique en centrant le carroyage autour de la première adresse recherchée avec succès
-- **FR-003b**: Le système DOIT conserver la même origine de grille pour toutes les recherches d'adresses suivantes (pas de recentrage automatique)
+- **FR-003a**: Le système DOIT calculer l'origine de la grille (case A1) en l'alignant sur les limites de la ville sélectionnée (coin nord-ouest)
+- **FR-003b**: Le système DOIT maintenir la grille fixe pour couvrir uniquement la zone de la ville sélectionnée
+- **FR-003c**: Le système DOIT calculer les limites de la ville avec un rayon de 5km autour du centre de la ville par défaut
 - **FR-004**: Le système DOIT afficher les identifiants alphanumériques (lettres + chiffres) pour chaque case de manière lisible sur la carte
 - **FR-005**: Le système DOIT calculer dans quelle case se trouve une adresse recherchée (sans révélation automatique à l'utilisateur)
 - **FR-005a**: Le système DOIT appliquer une règle de priorité nord-ouest lorsqu'une adresse se trouve exactement sur une ligne de séparation (l'adresse appartient à la case située au nord et/ou à l'ouest)
@@ -96,6 +105,9 @@ L'utilisateur peut modifier la taille des cases du carroyage depuis les paramèt
 - **FR-010**: Le système DOIT maintenir l'alignement géographique correct du carroyage lors des opérations de zoom et de déplacement sur la carte
 - **FR-011**: Le système DOIT gérer la numérotation des colonnes au-delà de Z en utilisant AA, AB, AC, etc.
 - **FR-012**: Le système DOIT recalculer et redessiner le carroyage lorsque l'utilisateur change la taille des cases dans les paramètres
+- **FR-013**: Le système DOIT restreindre la navigation de la carte aux limites de la ville pour empêcher l'utilisateur de sortir de la zone de jeu
+- **FR-014**: Le système DOIT définir des niveaux de zoom minimum (12) et maximum (18) appropriés pour la visualisation de la grille
+- **FR-015**: Le système DOIT aligner la grille sur les limites calculées de la ville pour une couverture optimale de la zone de jeu
 
 ### Key Entities
 

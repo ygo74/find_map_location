@@ -103,9 +103,16 @@ Phase 6 (Polish & Cross-Cutting)
   - Return LatLngBounds
 
 - [X] T010 Implement calculateGridOrigin() method
-  - Calculate offset west and north from address point
-  - Use configurable gridWidth/gridHeight for centering
-  - Default to 10x10 grid centering
+  - Calculate grid origin aligned with city bounds (north-west corner snap-to-grid)
+  - Accept cityCenter (LatLng) and optional cityBounds (GridBounds) parameters
+  - Use city center as fallback if no bounds provided
+  - Apply snap-to-grid algorithm when cityBounds available for optimal alignment
+
+- [X] T010a Implement calculateCityBounds() method
+  - Accept city center (LatLng) and radius in meters (double)
+  - Calculate north-west and south-east corners using distance offsets
+  - Return GridBounds (north, south, east, west coordinates)
+  - Default radius: 5000.0 meters (5km)
 
 - [X] T011 Implement getCellForPoint() method
   - Calculate east/south distances from origin
@@ -140,9 +147,16 @@ Phase 6 (Polish & Cross-Cutting)
   - Test point at exact corner (north-west priority)
 
 - [X] T016 [P] Write unit tests for calculateGridOrigin()
-  - Test centering on known coordinates
-  - Verify offset accuracy (±10m acceptable)
-  - Test with different cell sizes
+  - Test centering on known city coordinates
+  - Verify grid alignment with city bounds
+  - Test snap-to-grid algorithm accuracy
+  - Test fallback behavior when no bounds provided
+
+- [X] T016a [P] Write unit tests for calculateCityBounds()
+  - Test bounds calculation with standard 5km radius
+  - Verify north, south, east, west coordinates
+  - Test with different radii (3km, 10km)
+  - Validate bounds contain city center
 
 - [X] T017 [P] Write unit tests for generateVisibleCells()
   - Test typical viewport (5x5 cells)
@@ -212,8 +226,18 @@ Phase 6 (Polish & Cross-Cutting)
   - Add GridOverlayWidget to FlutterMap children (after TileLayer, before markers)
 
 - [X] T027 [US1] Add grid origin initialization logic to _generateAndSetAddress() in home_screen.dart
-  - Check if _gridConfig.origin == null
-  - If null, call GridCalculationService.calculateGridOrigin()
+  - Calculate city center from city.latitude and city.longitude
+  - Calculate city bounds with GridCalculationService.calculateCityBounds(cityCenter, 5000.0)
+  - Call GridCalculationService.calculateGridOrigin(cityCenter, cellSizeMeters, cityBounds: cityBounds)
+  - Call _gridConfig.setOrigin() with calculated origin
+  - Pass cityBounds to MapDisplay widget for map constraints
+
+- [X] T027a [US1] Modify lib/widgets/map_display.dart to add city bounds constraints
+  - Add cityBounds parameter (GridBounds?)
+  - Calculate default 5km bounds if not provided
+  - Add CameraConstraint.contain(bounds: mapBounds) to MapOptions
+  - Set minZoom: 12.0, maxZoom: 18.0 for optimal grid visibility
+  - Ensure map navigation is restricted to city bounds
   - Call _gridConfig.setOrigin() with calculated origin
   - Grid automatically displays via ChangeNotifier update
 
@@ -448,6 +472,62 @@ Phase 6 (Polish & Cross-Cutting)
 **Critical Path**: T001-T003 (Setup) → T004-T019 (Foundation) → T020-T027 (US1 Implementation) → MVP Delivery
 
 **Estimated Effort**: 19-26 hours (see plan.md for breakdown)
+
+---
+
+## Architectural Changes (Updated 2025-12-27)
+
+### Grid Centering and Bounds
+
+**Original Design**: Grid centered on first searched address with arbitrary offset
+**Current Implementation**: Grid centered on city center and aligned to city bounds
+
+**Key Changes**:
+1. `GridCalculationService.calculateGridOrigin()` signature changed:
+   - Old: `(LatLng addressPoint, double cellSizeMeters, {int gridWidth, int gridHeight})`
+   - New: `(LatLng cityCenter, double cellSizeMeters, {GridBounds? cityBounds})`
+
+2. New method added: `GridCalculationService.calculateCityBounds(LatLng cityCenter, double radiusMeters)`
+   - Default radius: 5000.0 meters (5km)
+   - Returns GridBounds with north, south, east, west coordinates
+
+3. Grid alignment logic:
+   - When cityBounds provided: Snap-to-grid algorithm aligns origin to city bounds (north-west corner)
+   - When cityBounds null: Falls back to city center as origin
+   - Grid covers entire city uniformly (not just area around one address)
+
+### Map Navigation Constraints
+
+**New Feature**: Map navigation restricted to city boundaries
+
+**Implementation**:
+1. `MapDisplay` widget modified:
+   - Added `cityBounds` parameter (GridBounds?)
+   - Added `CameraConstraint.contain(bounds: mapBounds)` to MapOptions
+   - Set zoom constraints: `minZoom: 12.0, maxZoom: 18.0`
+
+2. `home_screen.dart` modified:
+   - Calculate cityBounds with `GridCalculationService.calculateCityBounds(cityCenter, 5000.0)`
+   - Pass cityBounds to MapDisplay widget
+   - Grid initialization uses city center instead of individual address
+
+**Rationale**:
+- Ensures grid remains consistent and covers entire city
+- Prevents users from panning outside the game area
+- Aligns with game design: all addresses in the same city share the same grid
+- Improves user experience by constraining viewport to relevant area
+
+### Test Updates
+
+**Tests Modified**:
+1. `test/services/grid_calculation_service_test.dart`:
+   - Updated 3 tests in `calculateGridOrigin` group for new signature
+   - Added test for `calculateCityBounds()` method
+   - All 19 tests passing
+
+2. Integration tests may need updates:
+   - Grid alignment expectations changed (centered on city, not address)
+   - Map bounds constraints may affect test navigation
 
 ---
 
